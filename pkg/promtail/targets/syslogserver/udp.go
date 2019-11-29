@@ -1,43 +1,70 @@
 package syslogserver
 
 import (
-	"fmt"
 	"net"
 	"runtime"
+	"sync"
 
-	"github.com/influxdata/go-syslog"
+	"github.com/go-kit/kit/log"
 	"github.com/influxdata/go-syslog/rfc5424"
+	"github.com/prometheus/prometheus/pkg/labels"
 )
 
+type UDPServerConfig struct {
+	// ListenAddress is the address to listen on for syslog messages.
+	ListenAddress string `yaml:"listen_address"`
+}
+
 type UDPServer struct {
-	messages chan *syslog.Result
+	config UDPServerConfig
+	logger log.Logger
+
+	messages chan *Message
 
 	conn net.PacketConn
+
+	done *sync.WaitGroup
+}
+
+var _ SyslogServer = new(UDPServer)
+
+func NewUDPServer(l log.Logger, conf UDPServerConfig) *UDPServer {
+	return &UDPServer{
+		logger: l,
+		config: conf,
+
+		messages: make(chan *Message),
+		done:     new(sync.WaitGroup),
+	}
 }
 
 func (s *UDPServer) Start() error {
-	s.messages = make(chan *syslog.Result)
-	pc, err := net.ListenPacket("udp", "127.0.0.1:7777")
+	pc, err := net.ListenPacket("udp", s.config.ListenAddress)
 	if err != nil {
 		return err
 	}
 	s.conn = pc
 
-	// max udp package size
-	buf := make([]byte, 65535)
-
-	p := rfc5424.NewParser()
-
-	for i := 0; i < runtime.NumCPU(); i++ {
+	receivers := runtime.NumCPU()
+	s.done.Add(receivers)
+	for i := 0; i < receivers; i++ {
 		go func() {
+			defer s.done.Done()
+			// max udp package size
+			buf := make([]byte, 65535)
+
+			p := rfc5424.NewParser()
 			for {
-				n, _, err := pc.ReadFrom(buf)
+				n, addr, err := s.conn.ReadFrom(buf)
 				if err != nil {
-					fmt.Println("ReadFrom error:", err)
 					return
 				}
 				msg, err := p.Parse(buf[:n])
-				s.messages <- &syslog.Result{Message: msg, Error: err}
+				s.messages <- &Message{
+					Message: msg,
+					Error:   err,
+					Labels:  appendAddressLabels(labels.NewBuilder(nil), addr),
+				}
 			}
 		}()
 	}
@@ -47,10 +74,15 @@ func (s *UDPServer) Start() error {
 
 func (s *UDPServer) Stop() error {
 	err := s.conn.Close()
+	s.done.Wait()
 	close(s.messages)
 	return err
 }
 
-func (s *UDPServer) Messages() <-chan *syslog.Result {
+func (s *UDPServer) Messages() <-chan *Message {
 	return s.messages
+}
+
+func (s *UDPServer) Addr() net.Addr {
+	return s.conn.LocalAddr()
 }
