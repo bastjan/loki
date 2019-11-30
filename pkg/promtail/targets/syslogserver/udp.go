@@ -19,16 +19,13 @@ type UDPServer struct {
 	config UDPServerConfig
 	logger log.Logger
 
+	conn     net.PacketConn
 	messages chan *Message
-
-	conn net.PacketConn
 
 	done *sync.WaitGroup
 }
 
-var _ SyslogServer = new(UDPServer)
-
-func NewUDPServer(l log.Logger, conf UDPServerConfig) *UDPServer {
+func NewUDPServer(l log.Logger, conf UDPServerConfig) SyslogServer {
 	return &UDPServer{
 		logger: l,
 		config: conf,

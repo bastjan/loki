@@ -2,6 +2,7 @@ package targets
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"strings"
 	"sync"
@@ -79,10 +80,20 @@ func NewSyslogTarget(
 }
 
 func (t *SyslogTarget) run() error {
-	t.server = syslogserver.NewTCPServer(t.logger, syslogserver.TCPServerConfig{
-		ListenAddress: t.config.ListenAddress,
-		IdleTimeout:   t.config.IdleTimeout,
-	})
+	addrNet := strings.SplitN(t.config.ListenAddress, "/", 2)
+
+	if udp := (len(addrNet) > 1 && addrNet[1] == "udp"); udp {
+		t.server = syslogserver.NewUDPServer(t.logger, syslogserver.UDPServerConfig{
+			ListenAddress: addrNet[0],
+		})
+	} else if tcp := (len(addrNet) == 1 || addrNet[1] == "tcp"); tcp {
+		t.server = syslogserver.NewTCPServer(t.logger, syslogserver.TCPServerConfig{
+			ListenAddress: addrNet[0],
+			IdleTimeout:   t.config.IdleTimeout,
+		})
+	} else {
+		return fmt.Errorf("unknown network '%s'", addrNet[1])
+	}
 
 	err := t.server.Start()
 	if err != nil {

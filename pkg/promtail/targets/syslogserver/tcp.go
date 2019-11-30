@@ -25,21 +25,17 @@ type TCPServerConfig struct {
 
 type TCPServer struct {
 	config TCPServerConfig
-
 	logger log.Logger
 
-	messages chan *Message
-
 	listener net.Listener
+	messages chan *Message
 
 	shutdown          chan struct{}
 	connectionsClosed *sync.WaitGroup
 }
 
-var _ SyslogServer = new(TCPServer)
-
 // NewTCPServer creates a new TCP syslog server.
-func NewTCPServer(l log.Logger, conf TCPServerConfig) *TCPServer {
+func NewTCPServer(l log.Logger, conf TCPServerConfig) SyslogServer {
 	return &TCPServer{
 		logger:            l,
 		config:            conf,
@@ -92,7 +88,6 @@ func (s *TCPServer) acceptConnections() {
 	defer s.connectionsClosed.Done()
 
 	l := log.With(s.logger, "address", s.listener.Addr().String())
-	var backoff time.Duration
 
 	for {
 		c, err := s.listener.Accept()
@@ -104,14 +99,7 @@ func (s *TCPServer) acceptConnections() {
 			default:
 			}
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
-				if backoff == 0 {
-					backoff = 5 * time.Millisecond
-				} else {
-					backoff *= 2
-				}
-				if max := 1 * time.Second; backoff > max {
-					backoff = max
-				}
+				backoff := 10 * time.Millisecond
 				level.Warn(l).Log("msg", "failed to accept syslog connection", "err", err, "retry_in", backoff)
 				time.Sleep(backoff)
 				continue

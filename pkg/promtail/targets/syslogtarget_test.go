@@ -5,6 +5,8 @@ import (
 	"io"
 	"net"
 	"os"
+	"sort"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -48,20 +50,43 @@ func (c *TestLabeledClient) Messages() []ClientMessage {
 }
 
 func TestSyslogTarget_NewlineSeparatedMessages(t *testing.T) {
-	testSyslogTarget(t, false)
+	syslogTest{
+		network: "tcp",
+		formatter: func(s string) string {
+			return s + "\n"
+		},
+	}.run(t)
 }
 
 func TestSyslogTarget_OctetCounting(t *testing.T) {
-	testSyslogTarget(t, true)
+	syslogTest{
+		network: "tcp",
+		formatter: func(s string) string {
+			return fmt.Sprintf("%d %s", len(s), s)
+		},
+	}.run(t)
 }
 
-func testSyslogTarget(t *testing.T, octetCounting bool) {
+func TestSyslogTarget_UDP(t *testing.T) {
+	syslogTest{
+		network:   "udp",
+		formatter: func(s string) string { return s },
+	}.run(t)
+}
+
+type syslogTest struct {
+	network   string
+	needsSort bool
+	formatter func(string) string
+}
+
+func (s syslogTest) run(t *testing.T) {
 	w := log.NewSyncWriter(os.Stderr)
 	logger := log.NewLogfmtLogger(w)
 	client := &TestLabeledClient{log: logger}
 
 	tgt, err := NewSyslogTarget(logger, client, relabelConfig(t), &scrape.SyslogTargetConfig{
-		ListenAddress:       "127.0.0.1:0",
+		ListenAddress:       "127.0.0.1:0/" + s.network,
 		LabelStructuredData: true,
 		Labels: model.LabelSet{
 			"test": "syslog_target",
@@ -71,7 +96,7 @@ func testSyslogTarget(t *testing.T, octetCounting bool) {
 	defer tgt.Stop()
 
 	addr := tgt.ListenAddress().String()
-	c, err := net.Dial("tcp", addr)
+	c, err := net.Dial(s.network, addr)
 	require.NoError(t, err)
 	defer c.Close()
 
@@ -81,12 +106,22 @@ func testSyslogTarget(t *testing.T, octetCounting bool) {
 		`<165>1 2018-10-11T22:14:15.007Z host5 e - id3 [custom@32473 exkey="3"] An application event log entry...`,
 	}
 
-	err = writeMessagesToStream(c, messages, octetCounting)
+	err = writeMessagesToStream(c, messages, s.formatter)
 	require.NoError(t, err)
 
 	require.Eventuallyf(t, func() bool {
 		return len(client.Messages()) == len(messages)
 	}, time.Second, time.Millisecond, "Expected to receive %d messages, got %d.", len(messages), len(client.Messages()))
+
+	received := client.Messages()
+
+	if s.needsSort {
+		sort.Slice(received, func(i, j int) bool {
+			ii, _ := strconv.Atoi(string(received[i].Labels["sd_custom_exkey"]))
+			ji, _ := strconv.Atoi(string(received[j].Labels["sd_custom_exkey"]))
+			return ii < ji
+		})
+	}
 
 	require.Equal(t, model.LabelSet{
 		"test": "syslog_target",
@@ -98,10 +133,10 @@ func testSyslogTarget(t *testing.T, octetCounting bool) {
 		"msg_id":   "id1",
 
 		"sd_custom_exkey": "1",
-	}, client.Messages()[0].Labels)
-	require.Equal(t, "An application event log entry...", client.Messages()[0].Message)
+	}, received[0].Labels)
+	require.Equal(t, "An application event log entry...", received[0].Message)
 
-	require.NotZero(t, client.Messages()[0].Timestamp)
+	require.NotZero(t, received[0].Timestamp)
 }
 
 func relabelConfig(t *testing.T) []*relabel.Config {
@@ -129,19 +164,7 @@ func relabelConfig(t *testing.T) []*relabel.Config {
 	return relabels
 }
 
-func writeMessagesToStream(w io.Writer, messages []string, octetCounting bool) error {
-	var formatter func(string) string
-
-	if octetCounting {
-		formatter = func(s string) string {
-			return fmt.Sprintf("%d %s", len(s), s)
-		}
-	} else {
-		formatter = func(s string) string {
-			return s + "\n"
-		}
-	}
-
+func writeMessagesToStream(w io.Writer, messages []string, formatter func(string) string) error {
 	for _, msg := range messages {
 		_, err := fmt.Fprint(w, formatter(msg))
 		if err != nil {
@@ -150,54 +173,4 @@ func writeMessagesToStream(w io.Writer, messages []string, octetCounting bool) e
 	}
 
 	return nil
-}
-
-func TestSyslogTarget_InvalidData(t *testing.T) {
-	w := log.NewSyncWriter(os.Stderr)
-	logger := log.NewLogfmtLogger(w)
-	client := &TestLabeledClient{log: logger}
-
-	tgt, err := NewSyslogTarget(logger, client, relabelConfig(t), &scrape.SyslogTargetConfig{
-		ListenAddress: "127.0.0.1:0",
-	})
-	require.NoError(t, err)
-	defer tgt.Stop()
-
-	addr := tgt.ListenAddress().String()
-	c, err := net.Dial("tcp", addr)
-	require.NoError(t, err)
-	defer c.Close()
-
-	_, err = fmt.Fprint(c, "xxx")
-
-	// syslog target should immediately close the connection if sent invalid data
-	c.SetDeadline(time.Now().Add(time.Second))
-	buf := make([]byte, 1)
-	_, err = c.Read(buf)
-	require.EqualError(t, err, "EOF")
-}
-
-func TestSyslogTarget_IdleTimeout(t *testing.T) {
-	w := log.NewSyncWriter(os.Stderr)
-	logger := log.NewLogfmtLogger(w)
-	client := &TestLabeledClient{log: logger}
-
-	tgt, err := NewSyslogTarget(logger, client, relabelConfig(t), &scrape.SyslogTargetConfig{
-		ListenAddress: "127.0.0.1:0",
-		IdleTimeout:   time.Millisecond,
-	})
-	require.NoError(t, err)
-	defer tgt.Stop()
-
-	addr := tgt.ListenAddress().String()
-	c, err := net.Dial("tcp", addr)
-	require.NoError(t, err)
-	defer c.Close()
-
-	// connection should be closed before the higher timeout
-	// from SetDeadline fires
-	c.SetDeadline(time.Now().Add(time.Second))
-	buf := make([]byte, 1)
-	_, err = c.Read(buf)
-	require.EqualError(t, err, "EOF")
 }
