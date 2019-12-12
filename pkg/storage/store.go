@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"flag"
+	"fmt"
 
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
@@ -33,6 +34,7 @@ func (cfg *Config) RegisterFlags(f *flag.FlagSet) {
 type Store interface {
 	chunk.Store
 	LazyQuery(ctx context.Context, req logql.SelectParams) (iter.EntryIterator, error)
+	GetSeries(ctx context.Context, req logql.SelectParams) ([]labels.Labels, error)
 }
 
 type store struct {
@@ -97,6 +99,46 @@ func (s *store) LazyQuery(ctx context.Context, req logql.SelectParams) (iter.Ent
 	}
 	return newBatchChunkIterator(ctx, lazyChunks, s.cfg.MaxChunkBatchSize, matchers, filter, req.QueryRequest), nil
 
+}
+
+func (s *store) GetSeries(ctx context.Context, req logql.SelectParams) ([]labels.Labels, error) {
+	expr, err := req.LogSelector()
+	if err != nil {
+		return nil, err
+	}
+
+	matchers := expr.Matchers()
+	nameLabelMatcher, err := labels.NewMatcher(labels.MatchEqual, labels.MetricName, "logs")
+	if err != nil {
+		return nil, err
+	}
+
+	userID, err := user.ExtractOrgID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	matchers = append(matchers, nameLabelMatcher)
+	from, through := util.RoundToMilliseconds(req.Start, req.End)
+	chks, _, err := s.GetChunkRefs(ctx, userID, from, through, matchers...)
+	if err != nil {
+		return nil, err
+	}
+
+	var totalChunks int
+	for i := range chks {
+		chks[i] = filterChunksByTime(from, through, chks[i])
+		totalChunks += len(chks[i])
+	}
+
+	series := make([]labels.Labels, 0, totalChunks)
+	for i := range chks {
+		for _, c := range chks[i] {
+			fmt.Println(c.Fingerprint.String(), c.UserID, c.ExternalKey(), c.Metric.String())
+			series = append(series, c.Metric)
+		}
+	}
+	return series, nil
 }
 
 func filterChunksByTime(from, through model.Time, chunks []chunk.Chunk) []chunk.Chunk {

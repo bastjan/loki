@@ -104,3 +104,53 @@ func TestPrepopulate(t *testing.T) {
 		})
 	}
 }
+
+// func TestSeriesHandler(t *testing.T) {
+// 	request := logproto.QueryRequest{
+// 		Selector:  "{type=\"test\", fail=\"yes\"} |= \"foo\"",
+// 		Limit:     10,
+// 		Start:     time.Now().Add(-1 * time.Minute),
+// 		End:       time.Now(),
+// 		Direction: logproto.FORWARD,
+// 	}
+
+// 	store := newStoreMock()
+// 	store.On("LazyQuery", mock.Anything, mock.Anything).Return(mockStreamIterator(1, 2), nil)
+
+// 	queryClient := newQueryClientMock()
+// 	queryClient.On("Recv").Return(mockQueryResponse([]*logproto.Stream{mockStream(1, 2)}), nil)
+
+// 	ingesterClient := newQuerierClientMock()
+// 	ingesterClient.On("Query", mock.Anything, &request, mock.Anything).Return(queryClient, nil)
+
+// 	defaultLimits := defaultLimitsTestConfig()
+// 	defaultLimits.MaxStreamsMatchersPerQuery = 1
+// 	defaultLimits.MaxQueryLength = 2 * time.Minute
+
+// 	limits, err := validation.NewOverrides(defaultLimits)
+// 	require.NoError(t, err)
+
+// 	q, err := newQuerier(
+// 		mockQuerierConfig(),
+// 		mockIngesterClientConfig(),
+// 		newIngesterClientMockFactory(ingesterClient),
+// 		mockReadRingWithOneActiveIngester(),
+// 		store, limits)
+// 	require.NoError(t, err)
+
+// 	ctx := user.InjectOrgID(context.Background(), "test")
+
+// 	q.Label(ctx, &logproto.LabelRequest{})
+
+// 	// _, err = q.Select(ctx, logql.SelectParams{QueryRequest: &request})
+// 	// require.Equal(t, httpgrpc.Errorf(http.StatusBadRequest, "max streams matchers per query exceeded, matchers-count > limit (2 > 1)"), err)
+
+// 	// request.Selector = "{type=\"test\"}"
+// 	// _, err = q.Select(ctx, logql.SelectParams{QueryRequest: &request})
+// 	// require.NoError(t, err)
+
+// 	// request.Start = request.End.Add(-3 * time.Minute)
+// 	// _, err = q.Select(ctx, logql.SelectParams{QueryRequest: &request})
+// 	// require.Equal(t, httpgrpc.Errorf(http.StatusBadRequest, "invalid query, length > limit (3m0s > 2m0s)"), err)
+
+// }

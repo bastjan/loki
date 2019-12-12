@@ -2,11 +2,15 @@ package querier
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
+	"github.com/grafana/loki/pkg/iter"
 	"github.com/grafana/loki/pkg/loghttp"
 	loghttp_legacy "github.com/grafana/loki/pkg/loghttp/legacy"
+	"github.com/grafana/loki/pkg/logproto"
 	"github.com/grafana/loki/pkg/logql"
 	"github.com/grafana/loki/pkg/logql/marshal"
 	marshal_legacy "github.com/grafana/loki/pkg/logql/marshal/legacy"
@@ -126,6 +130,57 @@ func (q *Querier) LabelHandler(w http.ResponseWriter, r *http.Request) {
 	} else {
 		err = marshal_legacy.WriteLabelResponseJSON(*resp, w)
 	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+// SeriesHandler is a http.HandlerFunc for handling series queries.
+func (q *Querier) SeriesHandler(w http.ResponseWriter, r *http.Request) {
+	req, err := loghttp.ParseRangeQuery(r)
+	if err != nil {
+		http.Error(w, httpgrpc.Errorf(http.StatusBadRequest, err.Error()).Error(), http.StatusBadRequest)
+		return
+	}
+
+	fmt.Println("+++++++++++++++++++++++++++")
+	fmt.Println(req.Query, req.Start, req.End)
+	fmt.Println("+++++++++++++++++++++++++++")
+
+	params := logql.SelectParams{&logproto.QueryRequest{
+		Selector: req.Query,
+		Start:    req.Start,
+		End:      req.End,
+	}}
+
+	ctx := r.Context()
+
+	ingesterIterators, err := q.queryIngesters(ctx, params)
+	if err != nil {
+		http.Error(w, httpgrpc.Errorf(http.StatusBadRequest, err.Error()).Error(), http.StatusBadRequest)
+		return
+	}
+	chunkStoreIterators, err := q.store.LazyQuery(ctx, params)
+	if err != nil {
+		http.Error(w, httpgrpc.Errorf(http.StatusBadRequest, err.Error()).Error(), http.StatusBadRequest)
+		return
+	}
+
+	iterators := append(ingesterIterators, chunkStoreIterators)
+	iterx := iter.NewHeapIterator(iterators, params.Direction)
+
+	for iterx.Next() {
+		fmt.Println(iterx.Labels(), iterx.Entry().Line)
+	}
+
+	s, err := q.store.GetSeries(r.Context(), params)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	err = json.NewEncoder(w).Encode(s)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
