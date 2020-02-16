@@ -16,6 +16,7 @@ service Querier {
   rpc Label(LabelRequest) returns (LabelResponse) {};
   rpc Tail(TailRequest) returns (stream TailResponse) {};
   rpc Series(SeriesRequest) returns (SeriesResponse) {};
+  rpc DeleteSeries(SeriesRequest) returns (DeleteSeriesResponse) {};
   rpc TailersCount(TailersCountRequest) returns (TailersCountResponse) {};
 }
 
@@ -90,6 +91,9 @@ message SeriesRequest {
 
 message SeriesResponse {
   repeated SeriesIdentifier series = 1 [(gogoproto.nullable) = false];
+}
+
+message DeleteSeriesResponse {
 }
 
 message SeriesIdentifier {

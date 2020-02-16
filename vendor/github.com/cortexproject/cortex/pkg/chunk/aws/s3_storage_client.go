@@ -15,12 +15,12 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"github.com/prometheus/client_golang/prometheus"
+	awscommon "github.com/weaveworks/common/aws"
+	"github.com/weaveworks/common/instrument"
 
 	"github.com/cortexproject/cortex/pkg/chunk"
 	"github.com/cortexproject/cortex/pkg/chunk/util"
 	"github.com/cortexproject/cortex/pkg/util/flagext"
-	awscommon "github.com/weaveworks/common/aws"
-	"github.com/weaveworks/common/instrument"
 )
 
 var (
@@ -148,6 +148,10 @@ func (a *S3ObjectClient) PutChunks(ctx context.Context, chunks []chunk.Chunk) er
 		}
 	}
 	return lastErr
+}
+
+func (a *S3ObjectClient) DeleteChunk(ctx context.Context, chunkID string) error {
+	panic("implement me")
 }
 
 // bucketFromKey maps a key to a bucket name

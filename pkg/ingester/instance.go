@@ -277,6 +277,30 @@ func (i *instance) Series(_ context.Context, req *logproto.SeriesRequest) (*logp
 	return &logproto.SeriesResponse{Series: series}, nil
 }
 
+func (i *instance) DeleteSeries(_ context.Context, req *logproto.SeriesRequest) (*logproto.DeleteSeriesResponse, error) {
+	groups, err := loghttp.Match(req.GetGroups())
+	if err != nil {
+		return nil, err
+	}
+
+	seriesToDelete := make(map[uint64]struct{})
+	for _, matchers := range groups {
+		err = i.forMatchingStreams(matchers, func(stream *stream) error {
+			key := stream.labels.Hash()
+			seriesToDelete[key] = struct{}{}
+			return nil
+		})
+	}
+
+	fingerprints := make([]model.Fingerprint, len(seriesToDelete))
+	for key := range seriesToDelete {
+		fingerprints = append(fingerprints, model.Fingerprint(key))
+	}
+	i.dropStreams(fingerprints)
+
+	return &logproto.DeleteSeriesResponse{}, nil
+}
+
 // forMatchingStreams will execute a function for each stream that satisfies a set of requirements (time range, matchers, etc).
 // It uses a function in order to enable generic stream acces without accidentally leaking streams under the mutex.
 func (i *instance) forMatchingStreams(

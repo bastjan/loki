@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-kit/kit/log/level"
 	"github.com/prometheus/common/model"
+	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/weaveworks/common/httpgrpc"
 	"github.com/weaveworks/common/user"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -403,6 +404,42 @@ func (q *Querier) Series(ctx context.Context, req *logproto.SeriesRequest) (*log
 	defer cancel()
 
 	return q.awaitSeries(ctx, req)
+
+}
+
+// DeleteSeries removes series for the matcher set
+func (q *Querier) DeleteSeries(ctx context.Context, req *logproto.SeriesRequest) (*logproto.DeleteSeriesResponse, error) {
+	userID, err := user.ExtractOrgID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = q.validateQueryTimeRange(userID, &req.Start, &req.End); err != nil {
+		return nil, err
+	}
+
+	// Enforce the query timeout while querying backends
+	ctx, cancel := context.WithDeadline(ctx, time.Now().Add(q.cfg.QueryTimeout))
+	defer cancel()
+
+	resps, err := q.forAllIngesters(ctx, func(client logproto.QuerierClient) (interface{}, error) {
+		return client.DeleteSeries(ctx, req)
+	})
+	_ = resps
+	_ = err
+
+	s, err := q.awaitSeries(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, ss := range s.Series {
+		from := model.TimeFromUnixNano(req.Start.UnixNano())
+		to := model.TimeFromUnixNano(req.End.UnixNano())
+		q.store.DeleteSeriesIDs(ctx, from, to, userID, labels.FromMap(ss.Labels))
+	}
+
+	return &logproto.DeleteSeriesResponse{}, nil
 
 }
 

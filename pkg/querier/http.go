@@ -281,6 +281,25 @@ func (q *Querier) SeriesHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// DeleteSeriesHandler deletes time series that match a certain label set.
+// See https://prometheus.io/docs/prometheus/latest/querying/api/#finding-series-by-label-matchers
+func (q *Querier) DeleteSeriesHandler(w http.ResponseWriter, r *http.Request) {
+	req, err := loghttp.ParseSeriesQuery(r)
+	if err != nil {
+		http.Error(w, httpgrpc.Errorf(http.StatusBadRequest, err.Error()).Error(), http.StatusBadRequest)
+		return
+	}
+
+	_, err = q.DeleteSeries(r.Context(), req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(204)
+	return
+}
+
 // NewPrepopulateMiddleware creates a middleware which will parse incoming http forms.
 // This is important because some endpoints can POST x-www-form-urlencoded bodies instead of GET w/ query strings.
 func NewPrepopulateMiddleware() middleware.Interface {

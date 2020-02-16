@@ -121,6 +121,25 @@ func (o *flushOp) Priority() int64 {
 	return -int64(o.from)
 }
 
+func (i *instance) dropStreams(fps []model.Fingerprint) error {
+	i.streamsMtx.Lock()
+	defer i.streamsMtx.Unlock()
+
+	for _, fp := range fps {
+		stream, ok := i.streams[fp]
+		if !ok {
+			continue
+		}
+		memoryChunks.Sub(float64(len(stream.chunks)))
+		delete(i.streams, stream.fp)
+		i.index.Delete(stream.labels, stream.fp)
+		i.streamsRemovedTotal.Inc()
+		memoryStreams.Dec()
+	}
+
+	return nil
+}
+
 // sweepUsers periodically schedules series for flushing and garbage collects users with no series
 func (i *Ingester) sweepUsers(immediate bool) {
 	instances := i.getInstances()

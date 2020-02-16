@@ -70,3 +70,5 @@ replace golang.org/x/net => golang.org/x/net v0.0.0-20190923162816-aa69164e4478
 replace github.com/Azure/azure-sdk-for-go => github.com/Azure/azure-sdk-for-go v36.2.0+incompatible
 
 replace github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.0+incompatible
+
+replace github.com/cortexproject/cortex => github.com/sandeepsukhani/cortex v0.0.0-20200213063000-682b96a52938

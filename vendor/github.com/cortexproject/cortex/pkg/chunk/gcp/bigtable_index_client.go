@@ -14,11 +14,12 @@ import (
 	ot "github.com/opentracing/opentracing-go"
 	otlog "github.com/opentracing/opentracing-go/log"
 
+	"github.com/pkg/errors"
+
 	"github.com/cortexproject/cortex/pkg/chunk"
 	chunk_util "github.com/cortexproject/cortex/pkg/chunk/util"
 	"github.com/cortexproject/cortex/pkg/util"
 	"github.com/cortexproject/cortex/pkg/util/grpcclient"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -166,6 +167,10 @@ func (b bigtableWriteBatch) Add(tableName, hashValue string, rangeValue []byte, 
 	}
 
 	mutation.Set(columnFamily, columnKey, 0, value)
+}
+
+func (b bigtableWriteBatch) Delete(tableName, hashValue string, rangeValue []byte) {
+	panic("implement me")
 }
 
 func (s *storageClientColumnKey) BatchWrite(ctx context.Context, batch chunk.WriteBatch) error {

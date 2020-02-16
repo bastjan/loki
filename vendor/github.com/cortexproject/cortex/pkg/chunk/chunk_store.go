@@ -16,6 +16,7 @@ import (
 	"github.com/prometheus/common/model"
 	"github.com/prometheus/prometheus/pkg/labels"
 	"github.com/prometheus/prometheus/promql"
+	"github.com/weaveworks/common/httpgrpc"
 
 	"github.com/cortexproject/cortex/pkg/chunk/cache"
 	"github.com/cortexproject/cortex/pkg/util"
@@ -23,7 +24,6 @@ import (
 	"github.com/cortexproject/cortex/pkg/util/flagext"
 	"github.com/cortexproject/cortex/pkg/util/spanlogger"
 	"github.com/cortexproject/cortex/pkg/util/validation"
-	"github.com/weaveworks/common/httpgrpc"
 )
 
 var (
@@ -481,4 +481,90 @@ func (c *store) convertChunkIDsToChunks(ctx context.Context, userID string, chun
 	}
 
 	return chunkSet, nil
+}
+
+func (c *store) DeleteChunk(ctx context.Context, from, through model.Time, userID, chunkID string, metric labels.Labels, partiallyDeletedInterval *model.Interval) error {
+	metricName := metric.Get(model.MetricNameLabel)
+	if metricName == "" {
+		return errors.New("No metric name label")
+	}
+
+	chunkWriteEntries, err := c.schema.GetWriteEntries(from, through, userID, string(metricName), metric, chunkID)
+	if err != nil {
+		return err
+	}
+
+	return c.deleteChunk(ctx, userID, chunkID, metric, chunkWriteEntries, partiallyDeletedInterval, func(chunk Chunk) error {
+		return c.PutOne(ctx, chunk.From, chunk.Through, chunk)
+	})
+}
+
+func (c *store) deleteChunk(ctx context.Context, userID, chunkID string, metric labels.Labels,
+	chunkWriteEntries []IndexEntry, partiallyDeletedInterval *model.Interval, putChunkFunc func(chunk Chunk) error) error {
+	metricName := metric.Get(model.MetricNameLabel)
+	if metricName == "" {
+		return errors.New("No metric name label")
+	}
+
+	// if chunk is partially deleted, fetch it, slice non-deleted portion and put it to store before deleting original chunk
+	if partiallyDeletedInterval != nil {
+		chunk, err := ParseExternalKey(userID, chunkID)
+		if err != nil {
+			return err
+		}
+
+		chunks, err := c.Fetcher.FetchChunks(ctx, []Chunk{chunk}, []string{chunkID})
+		if err != nil {
+			return err
+		}
+
+		chunk = chunks[0]
+		if partiallyDeletedInterval.Start > chunk.From {
+			newChunk, err := chunk.Slice(chunk.From, partiallyDeletedInterval.Start-1)
+			if err != nil {
+				return err
+			}
+
+			if err := newChunk.Encode(); err != nil {
+				return err
+			}
+
+			err = putChunkFunc(*newChunk)
+			if err != nil {
+				return err
+			}
+		}
+
+		if partiallyDeletedInterval.End < chunk.Through {
+			newChunk, err := chunk.Slice(partiallyDeletedInterval.End+1, chunk.Through)
+			if err != nil {
+				return err
+			}
+
+			if err := newChunk.Encode(); err != nil {
+				return err
+			}
+
+			err = putChunkFunc(*newChunk)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	batch := c.index.NewWriteBatch()
+	for i := range chunkWriteEntries {
+		batch.Delete(chunkWriteEntries[i].TableName, chunkWriteEntries[i].HashValue, chunkWriteEntries[i].RangeValue)
+	}
+
+	err := c.index.BatchWrite(ctx, batch)
+	if err != nil {
+		return err
+	}
+
+	return c.chunks.DeleteChunk(ctx, chunkID)
+}
+
+func (c *store) DeleteSeriesIDs(ctx context.Context, from, through model.Time, userID string, metric labels.Labels) error {
+	return nil
 }
