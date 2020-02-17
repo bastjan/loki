@@ -76,7 +76,11 @@ func CreateChunks(startIndex, batchSize int, from model.Time, through model.Time
 
 func dummyChunkFor(from, through model.Time, metric labels.Labels) chunk.Chunk {
 	cs := promchunk.New()
-	_, _ = cs.Add(model.SamplePair{Timestamp: through, Value: 0})
+
+	for ts := from; ts <= through; ts = ts.Add(15 * time.Second) {
+		_, _ = cs.Add(model.SamplePair{Timestamp: ts, Value: 0})
+	}
+
 	chunk := chunk.NewChunk(
 		userID,
 		client.Fingerprint(metric),

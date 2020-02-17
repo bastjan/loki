@@ -47,7 +47,7 @@ require (
 	github.com/shurcooL/vfsgen v0.0.0-20181202132449-6a9ea43bcacd
 	github.com/stretchr/testify v1.4.0
 	github.com/tonistiigi/fifo v0.0.0-20190226154929-a9fb20d87448
-	github.com/ugorji/go v1.1.7 // indirect
+	github.com/ugorji/go/codec v1.1.7 // indirect
 	github.com/weaveworks/common v0.0.0-20200201141823-27e183090ab1
 	go.etcd.io/etcd v0.0.0-20190815204525-8f85f0dc2607 // indirect
 	golang.org/x/net v0.0.0-20191112182307-2180aed22343
@@ -71,4 +71,4 @@ replace github.com/Azure/azure-sdk-for-go => github.com/Azure/azure-sdk-for-go v
 
 replace github.com/Azure/go-autorest => github.com/Azure/go-autorest v13.3.0+incompatible
 
-replace github.com/cortexproject/cortex => github.com/sandeepsukhani/cortex v0.0.0-20200213063000-682b96a52938
+replace github.com/cortexproject/cortex => github.com/sandeepsukhani/cortex v0.0.0-20200217121512-3e35a6d07743

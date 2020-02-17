@@ -162,5 +162,5 @@ func (s *bigtableObjectClient) GetChunks(ctx context.Context, input []chunk.Chun
 }
 
 func (s *bigtableObjectClient) DeleteChunk(ctx context.Context, chunkID string) error {
-	panic("implement me")
+	return chunk.ErrMethodNotImplemented
 }

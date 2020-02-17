@@ -107,7 +107,7 @@ func (s *GCSObjectClient) getChunk(ctx context.Context, decodeContext *chunk.Dec
 }
 
 func (s *GCSObjectClient) DeleteChunk(ctx context.Context, chunkID string) error {
-	panic("implement me")
+	return chunk.ErrMethodNotImplemented
 }
 
 // Get object from the store

@@ -123,7 +123,7 @@ func (b *BlobStorage) PutChunks(ctx context.Context, chunks []chunk.Chunk) error
 }
 
 func (b *BlobStorage) DeleteChunk(ctx context.Context, chunkID string) error {
-	panic("implement me")
+	return chunk.ErrMethodNotImplemented
 }
 
 func (b *BlobStorage) GetObject(ctx context.Context, objectKey string) (io.ReadCloser, error) {

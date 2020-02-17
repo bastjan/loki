@@ -151,7 +151,7 @@ func (a *S3ObjectClient) PutChunks(ctx context.Context, chunks []chunk.Chunk) er
 }
 
 func (a *S3ObjectClient) DeleteChunk(ctx context.Context, chunkID string) error {
-	panic("implement me")
+	return chunk.ErrMethodNotImplemented
 }
 
 // bucketFromKey maps a key to a bucket name

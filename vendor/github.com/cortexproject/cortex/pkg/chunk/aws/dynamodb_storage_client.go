@@ -599,7 +599,7 @@ func (a dynamoDBStorageClient) getDynamoDBChunks(ctx context.Context, chunks []c
 }
 
 func (a dynamoDBStorageClient) DeleteChunk(ctx context.Context, chunkID string) error {
-	panic("implement me")
+	return chunk.ErrMethodNotImplemented
 }
 
 func processChunkResponse(response *dynamodb.BatchGetItemOutput, chunksByKey map[string]chunk.Chunk) ([]chunk.Chunk, error) {

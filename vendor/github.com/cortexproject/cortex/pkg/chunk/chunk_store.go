@@ -519,19 +519,15 @@ func (c *store) deleteChunk(ctx context.Context, userID, chunkID string, metric 
 		}
 
 		chunk = chunks[0]
+		var newChunks []*Chunk
 		if partiallyDeletedInterval.Start > chunk.From {
 			newChunk, err := chunk.Slice(chunk.From, partiallyDeletedInterval.Start-1)
 			if err != nil {
 				return err
 			}
 
-			if err := newChunk.Encode(); err != nil {
-				return err
-			}
-
-			err = putChunkFunc(*newChunk)
-			if err != nil {
-				return err
+			if newChunk != nil {
+				newChunks = append(newChunks, newChunk)
 			}
 		}
 
@@ -539,6 +535,17 @@ func (c *store) deleteChunk(ctx context.Context, userID, chunkID string, metric 
 			newChunk, err := chunk.Slice(partiallyDeletedInterval.End+1, chunk.Through)
 			if err != nil {
 				return err
+			}
+
+			if newChunk != nil {
+				newChunks = append(newChunks, newChunk)
+			}
+		}
+
+		for _, newChunk := range newChunks {
+			// we don't want to create chunks with no samples in it
+			if newChunk.Data.Len() == 0 {
+				continue
 			}
 
 			if err := newChunk.Encode(); err != nil {
