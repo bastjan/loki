@@ -13,6 +13,7 @@ const (
 	StageTypeJSON      = "json"
 	StageTypeRegex     = "regex"
 	StageTypeReplace   = "replace"
+	StageTypeEncoding  = "encoding"
 	StageTypeMetric    = "metrics"
 	StageTypeLabel     = "labels"
 	StageTypeTimestamp = "timestamp"
@@ -103,6 +104,11 @@ func New(logger log.Logger, jobName *string, stageType string,
 		}
 	case StageTypeReplace:
 		s, err = newReplaceStage(logger, cfg)
+		if err != nil {
+			return nil, err
+		}
+	case StageTypeEncoding:
+		s, err = newEncodingStage(logger, cfg)
 		if err != nil {
 			return nil, err
 		}
